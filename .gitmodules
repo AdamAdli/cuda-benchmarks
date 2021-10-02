@@ -1,4 +1,6 @@
 [submodule "abseil-cpp"]
+	path = sputnik/abseil-cpp
 	url = https://github.com/abseil/abseil-cpp.git
 [submodule "sputnik"]
+	path = sputnik/sputnik
 	url = https://github.com/google-research/sputnik
