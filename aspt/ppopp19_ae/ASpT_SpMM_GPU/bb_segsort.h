@@ -17,6 +17,8 @@
 #ifndef _H_BB_SEGSORT
 #define _H_BB_SEGSORT
 
+#include "shfl_fix.h"
+
 #include <iostream>
 #include <vector>
 #include <algorithm>

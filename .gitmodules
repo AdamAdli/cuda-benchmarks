@@ -1,6 +1,13 @@
+
 [submodule "abseil-cpp"]
 	path = sputnik/abseil-cpp
 	url = https://github.com/abseil/abseil-cpp.git
 [submodule "sputnik"]
 	path = sputnik/sputnik
 	url = https://github.com/google-research/sputnik
+[submodule "BIDMach"]
+	path = aspt/ppopp19_ae/BIDMach
+	url = https://github.com/BIDData/BIDMach.git
+[submodule "merge-spmm"]
+	path = aspt/ppopp19_ae/merge-spmm
+	url = https://github.com/owensgroup/merge-spmm.git
