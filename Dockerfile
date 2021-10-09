@@ -11,10 +11,16 @@ RUN sudo apt-get -y install tmux wget libssl-dev git libgoogle-glog-dev
 
 # Install python
 RUN apt-get install -y vim python3 python3-pip;
-# RUN pip3 install torch==1.9.0+cu111 torchvision==0.10.0+cu111 torchaudio==0.9.0 -f https://download.pytorch.org/whl/torch_stable.html;
-# RUN pip3 install torch-scatter torch-sparse torch-cluster torch-spline-conv torch-geometric -f https://pytorch-geometric.com/whl/torch-1.9.0+cu111.html;
+RUN pip3 install torch==1.9.0+cu111 torchvision==0.10.0+cu111 torchaudio==0.9.0 -f https://download.pytorch.org/whl/torch_stable.html;
+RUN pip3 install torch-scatter torch-sparse torch-cluster torch-spline-conv torch-geometric -f https://pytorch-geometric.com/whl/torch-1.9.0+cu111.html;
+RUN pip3 install tensorflow
 RUN pip3 install jupyterlab
 RUN pip3 install pybind11
+RUN pip3 install scipy
+RUN pip3 install numpy
+RUN pip3 install pandas
+RUN pip3 install matplotlib
+
 
 # install a newer version of libstdc++
 RUN sudo apt-get install -y software-properties-common;
