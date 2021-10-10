@@ -1,5 +1,7 @@
 #!/bin/bash
 
+PARENT="/home/jim/research/paramath/spmm-benchmarks/aspt/ppopp19_ae"
+
 mkdir data
 cd data
 wget https://www.cise.ufl.edu/research/sparse/MM/DIMACS10/144.tar.gz
@@ -960,7 +962,7 @@ wget https://www.cise.ufl.edu/research/sparse/MM/Zhao/Zhao1.tar.gz
 wget https://www.cise.ufl.edu/research/sparse/MM/Zhao/Zhao2.tar.gz
 find . -name '*.tar.gz' -exec tar xvf {} \;
 rm *.tar.gz
-cp ../conv.c .
+cp ${PARENT}/conv.c .
 gcc -O3 -o conv conv.c
 
 for i in `ls -d */`
@@ -973,5 +975,5 @@ rm ${ii}.mt0
 cd ..
 done
 
-cd ..
+cd ${PARENT}
 
