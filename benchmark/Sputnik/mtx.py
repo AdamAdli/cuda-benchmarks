@@ -25,7 +25,36 @@ def get_mtx(path):
                     
     return result
 
-    
+ 
+
+def dense_to_sparse(matrix):
+  """Converts dense numpy matrix to a csr sparse matrix."""
+  assert len(matrix.shape) == 2
+
+  # Extract the nonzero values.
+  values = matrix.compress((matrix != 0).flatten())
+
+  # Calculate the offset of each row.
+  mask = (matrix != 0).astype(np.int32)
+  row_offsets = np.concatenate(([0], np.cumsum(np.add.reduce(mask, axis=1))),
+                               axis=0)
+
+  # Create the row indices and sort them.
+  row_indices = np.argsort(-1 * np.diff(row_offsets))
+
+  # Extract the column indices for the nonzero values.
+  x = mask * (np.arange(matrix.shape[1]) + 1)
+  column_indices = x.compress((x != 0).flatten())
+  column_indices = column_indices - 1
+
+  # Cast the desired precision.
+  values = values.astype(np.float32)
+  row_indices, row_offsets, column_indices = [
+      x.astype(np.uint32) for x in
+      [row_indices, row_offsets, column_indices]
+  ]
+  return values, row_indices, row_offsets, column_indices
+
 
 if __name__ == "__main__":
     path = '/mnt/benchmark/dlmc/rn50/extended_magnitude_pruning/0.8/bottleneck_1_block_group_projection_block_group1.smtx'
