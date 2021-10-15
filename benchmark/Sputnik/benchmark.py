@@ -41,6 +41,17 @@ def get_batch_size(path):
 			result[layer_name] = int(batch_size)
 	return result
 
+def get_all_subdirs(root_path):
+	pruning_methods = os.listdir(root_path)
+	all_dirs = {}
+	for method in pruning_methods:
+		method_dir = os.path.join(root_path, method)
+		sparsities = os.listdir(method_dir)
+		for sparsity in sparsities:
+			sparsity_path = os.path.join(method_dir, sparsity)
+			all_dirs[(method, float(sparsity))] = sparsity_path
+	return all_dirs
+
 def resnet_exp(root_path, batch_size = 32):
 	"""
 	Given the path to the resnet matrix directory (path to rn50), return a dictionary containing the
@@ -64,14 +75,15 @@ def resnet_exp(root_path, batch_size = 32):
 	resnet_time_dic = {}
 
 	# get all the paths
-	pruning_methods = os.listdir("/mnt/benchmark/dlmc/rn50")
-	all_dirs = {}
-	for method in pruning_methods:
-		method_dir = os.path.join(root_path, method)
-		sparsities = os.listdir(method_dir)
-		for sparsity in sparsities:
-			sparsity_path = os.path.join(method_dir, sparsity)
-			all_dirs[(method, float(sparsity))] = sparsity_path
+	# pruning_methods = os.listdir(root_path)
+	# all_dirs = {}
+	# for method in pruning_methods:
+	# 	method_dir = os.path.join(root_path, method)
+	# 	sparsities = os.listdir(method_dir)
+	# 	for sparsity in sparsities:
+	# 		sparsity_path = os.path.join(method_dir, sparsity)
+	# 		all_dirs[(method, float(sparsity))] = sparsity_path
+	all_dirs = get_all_subdirs(root_path)
 
 	for k, v in all_dirs.items():
 		#k, v example:
@@ -79,18 +91,38 @@ def resnet_exp(root_path, batch_size = 32):
 		resnet_time_dic[k] = process_subdir(v)
 	return resnet_time_dic	
 
+def transformer_exp(root_path):
+	"""
+	Given root path of transformer matrices, return the runtime of each group
+	"""
+	def cat_by_layers(subdir_path):
+		files = os.listdir(subdir_path)
+		result = {}
+		for file in files:
+			_, functionality, _, layer_number = file.split("_")[:4]
+			k = (functionality, layer_number)
+			if (k not in result):
+				result[k] = [file]
+			else:
+				result[k].append(file)
+		return result
+	
+	def layer_timing_logic():
+		"""
+		TODO
+		"""
+		return False
 
-
-
-if __name__ == "__main__":
-	result = resnet_exp("/mnt/benchmark/dlmc/rn50")
-	for k, v in result.items():
-		print(k, v)
-		break
+	all_dirs = get_all_subdirs(root_path)
+	result = {}
+	# for subdir in all_dirs:
+			
 
 	
-"""
-('extended_magnitude_pruning', 0.96) /mnt/benchmark/dlmc/rn50/extended_magnitude_pruning/0.96
 
-"""
-		
+
+# if __name__ == "__main__":
+# 	result = resnet_exp("/mnt/benchmark/dlmc/rn50")
+# 	for k, v in result.items():
+# 		print(k, v)
+# 		break
