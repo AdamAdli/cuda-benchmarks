@@ -3,7 +3,7 @@ import scipy.sparse as ss
 from cpp_lib import *
 import os
 from mtx import *
-
+import pandas as pd
 
 REPS=32
 BURN_ITERS=32
@@ -118,7 +118,28 @@ def transformer_exp(root_path):
 	# for subdir in all_dirs:
 			
 
-	
+def rn50_result_to_csv(result, fname):
+  """
+  Given the result (by calling resnet_exp function), save it
+  into a csv, maching the table here:
+  https://github.com/jimgao1/spmm-benchmarks/blob/master/aspt/measurements.ipynb
+  """
+  def dir_helper(method, accuracy, mtx_runtime):
+    result = []
+    for mtx_name, mtx_runtime in mtx_runtime.items():
+      dir_name = "dlmc/rn50/{}/{}/{}.mtx".format(method, accuracy, mtx_name)
+      result.append((dir_name, mtx_runtime))
+    return result 
+
+  acc = []
+  for k, v in result.items():
+    method, accuracy = k
+    mtx_runtime = v
+    tmp = dir_helper(method, accuracy, mtx_runtime)
+    acc.extend(tmp)
+  df = pd.DataFrame.from_records(acc, columns=["filename", "time_ms"])
+  df.to_csv("{}.csv".format(fname))
+
 
 
 # if __name__ == "__main__":
