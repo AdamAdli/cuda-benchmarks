@@ -1,0 +1,12 @@
+.ipynb_checkpoints
+
+ppopp19_ae/ASpT_SpMM_GPU/SpMM_GPU_SP.out
+ppopp19_ae/ASpT_SpMM_GPU/dspmm_128
+ppopp19_ae/ASpT_SpMM_GPU/dspmm_32
+ppopp19_ae/ASpT_SpMM_GPU/sspmm_128
+ppopp19_ae/ASpT_SpMM_GPU/sspmm_32
+ppopp19_ae/SpMM_GPU_SP.out
+ppopp19_ae/SpMM_GPU_SP_preprocessing.out
+
+sputnik_data
+test_dataset
