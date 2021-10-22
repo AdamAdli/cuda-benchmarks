@@ -52,7 +52,7 @@ def get_all_subdirs(root_path):
 			all_dirs[(method, float(sparsity))] = sparsity_path
 	return all_dirs
 
-def resnet_exp(root_path, batch_size = 32):
+def resnet_exp(root_path, custom_batch_size = 32, use_custom_bs = False):
 	"""
 	Given the path to the resnet matrix directory (path to rn50), return a dictionary containing the
 	pruned weight matrix layer name as well as the corresponding run time
@@ -68,7 +68,10 @@ def resnet_exp(root_path, batch_size = 32):
 			mtx_name = mtx_file.split(".")[0]
 			A = get_mtx(mtx_file_path)
 			B_batch_size = batch_size_dic[mtx_name]
-			cur_runtime = sgk_op_runtime(A, B_batch_size)
+			if use_custom_bs:
+				cur_runtime = sgk_op_runtime(A, custom_batch_size)
+			else:
+				cur_runtime = sgk_op_runtime(A, B_batch_size)
 			result[mtx_name] = cur_runtime
 		return result
 
