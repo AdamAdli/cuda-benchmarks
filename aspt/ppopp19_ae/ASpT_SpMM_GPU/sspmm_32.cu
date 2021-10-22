@@ -126,6 +126,7 @@ void ready(int argc, char **argv) {
         fgets(buf, 300, fp);
 
     fscanf(fp, "%d %d %d", &nr, &nc, &ne);
+	fprintf(stderr, "read: %d %d %d\n", nr, nc, ne);
     nr0 = nr;
     ne *= (sflag + 1);
     nr = CEIL(nr, BH) * BH;
@@ -1252,6 +1253,7 @@ void process() {
     }
 //      fprintf(stdout, "num_diff : %d\n", num_diff);
     fprintf(fpo, "%f,", (double) num_diff / (nr * sc) * 100);
+	fprintf(stderr, "nr = %d, nc = %d, sc = %d, nnz = %d\n", nr, nc, sc, ne);
     fprintf(stderr, "%d/%d\n", num_diff, nr*sc);
 
 //fprintf(stdout, "X(%f %f)\n", x1, x2);

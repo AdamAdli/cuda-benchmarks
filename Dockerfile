@@ -6,7 +6,7 @@ RUN apt-get update;
 
 # Install other stuff
 RUN apt-get install sudo;
-RUN sudo apt-get -y install tmux wget libssl-dev git libgoogle-glog-dev
+RUN sudo apt-get -y install tmux wget libssl-dev git libgoogle-glog-dev libjpeg-dev zlib1g-dev
 
 
 # Install python
@@ -20,6 +20,7 @@ RUN pip3 install scipy
 RUN pip3 install numpy
 RUN pip3 install pandas
 RUN pip3 install matplotlib
+RUN pip3 install jupyter_http_over_ws
 
 
 # install a newer version of libstdc++
@@ -63,6 +64,9 @@ RUN useradd -m -u $UID -g $GID -o -s /bin/bash $UNAME
 RUN echo "tian:password" | chpasswd
 
 RUN adduser $UNAME sudo
+
+# Configure juptyer
+RUN jupyter serverextension enable --py jupyter_http_over_ws
 
 USER $UNAME
 
