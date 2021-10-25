@@ -11,3 +11,10 @@
 [submodule "merge-spmm"]
 	path = aspt/ppopp19_ae/merge-spmm
 	url = https://github.com/owensgroup/merge-spmm.git
+[submodule "third_party/kernels/sputnik"]
+	path = third_party/kernels/sputnik
+	url = https://github.com/google-research/sputnik
+[submodule "third_party/pybind11"]
+	path = third_party/pybind11
+	url = https://github.com/pybind/pybind11
+	branch = stable

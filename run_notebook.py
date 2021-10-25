@@ -1,5 +1,5 @@
 #!/usr/bin/python
-import utilities.environment as env
+import src.utilities.environment as env
 import subprocess
 import argparse
 import sys
@@ -33,6 +33,7 @@ if args.build:
 
 
 docker_args = [
+    '--runtime nvidia',
     '--shm-size=32G',
     '-p 8888:8888 '
 ]
@@ -107,4 +108,4 @@ while True:
             found_token = True
 
             with open(env.REPO_ROOT_PATH + '/../running-notebook.txt', 'w') as running_notebook_file:
-                running_notebook_file.write(f'http://localhost:8888/?token={match.group(1)}')
+                running_notebook_file.write(f'http://localhost:8888/?token={match.group(1)}\n')

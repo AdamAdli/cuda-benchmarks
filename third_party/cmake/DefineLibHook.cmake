@@ -1,0 +1,47 @@
+function(check_defined)
+    if (DEFINED ${ARGV0})
+        set(${ARGV0}_SET TRUE PARENT_SCOPE)
+    else()
+        set(${ARGV0}_SET FALSE PARENT_SCOPE)
+    endif()
+endfunction()
+
+set(BUILD_FOLDER "${CMAKE_CURRENT_BINARY_DIR}")
+
+function(define_lib_hook)
+    set(options "")
+    set(oneValueArgs PREFIX NAME INCLUDE_PATH LIB_NAME LIB_PATH)
+    set(multiValueArgs "")
+    cmake_parse_arguments(PARSE_ARGV 0 DEFINE_LIB_HOOK "${options}" "${oneValueArgs}" "${multiValueArgs}")
+
+    set(NAME ${DEFINE_LIB_HOOK_NAME})
+
+    if(DEFINED DEFINE_LIB_HOOK_PREFIX)
+        set(HOOK_NAME add_${DEFINE_LIB_HOOK_PREFIX}_${NAME})
+    else()
+        set(HOOK_NAME add_lib_${NAME})
+    endif()
+
+    message(STATUS "Creating hook ${HOOK_NAME}")
+
+    check_defined(DEFINE_LIB_HOOK_INCLUDE_PATH)
+    check_defined(DEFINE_LIB_HOOK_LIB_NAME)
+    check_defined(DEFINE_LIB_HOOK_LIB_PATH)
+
+    cmake_language(EVAL CODE "
+        macro(${HOOK_NAME} TARGET)
+            IF(${DEFINE_LIB_HOOK_INCLUDE_PATH_SET})
+                message(STATUS \"[\${TARGET}][${NAME}] Adding include path ${CMAKE_CURRENT_LIST_DIR}/${DEFINE_LIB_HOOK_INCLUDE_PATH}\")
+                target_include_directories(\${TARGET} PUBLIC ${CMAKE_CURRENT_LIST_DIR}/${DEFINE_LIB_HOOK_INCLUDE_PATH})
+            ENDIF()
+            IF(${DEFINE_LIB_HOOK_LIB_PATH_SET})
+                message(STATUS \"[\${TARGET}][${NAME}] Adding link path ${BUILD_FOLDER}/${DEFINE_LIB_HOOK_LIB_PATH}\")
+                target_link_directories(\${TARGET} PUBLIC ${BUILD_FOLDER}/${DEFINE_LIB_HOOK_LIB_PATH})
+            ENDIF()
+            IF(${DEFINE_LIB_HOOK_LIB_NAME_SET})
+                message(STATUS \"[\${TARGET}][${NAME}] Linking ${DEFINE_LIB_HOOK_LIB_NAME}\")
+                target_link_libraries(\${TARGET} PRIVATE ${DEFINE_LIB_HOOK_LIB_NAME})
+            ENDIF()
+        endmacro()
+    ")
+endfunction()
