@@ -10,6 +10,6 @@ def scipy_spmm_kernel_decorator(func):
         n = B_mtx.shape[1]
 
         return func(m, n, k, A_mtx.nnz,    # m, n, k, nnz
-                 A_mtx.data.astype(np.float32), A_mtx.indptr.astype(np.int32), A_mtx.indices.astype(np.int32),
+                 A_mtx.data.astype(np.float32),A_mtx.indptr.astype(np.int32), A_mtx.indices.astype(np.int32),
                  B_mtx.flatten().astype(np.float32))
     return wrapper

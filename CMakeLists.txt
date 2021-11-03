@@ -6,7 +6,7 @@ cmake_policy(SET CMP0104 OLD)
 #
 #   Use -DCUDA_ARCHS to specify which GPUs to compile for
 #
-IF(NOT DEFINED CUDA_ARCHS )
+IF(NOT DEFINED CUDA_ARCHS)
     set(CUDA_ARCHS 86)
 ENDIF()
 
@@ -35,8 +35,68 @@ set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS}" CACHE STRING "" FORCE)
 
 add_subdirectory(third_party)
 
+# Collect common
+file(GLOB COMMON_CPP_SRCS ${PROJECT_SOURCE_DIR}/common/**/*.cc ${PROJECT_SOURCE_DIR}/common/*.cc)
+file(GLOB COMMON_CUDA_SRCS ${PROJECT_SOURCE_DIR}/common/**/*.cu ${PROJECT_SOURCE_DIR}/common/*.cu)
+set_source_files_properties(${COMMON_CUDA_SRCS} PROPERTIES LANGUAGE CUDA)
+
+file(GLOB COMMON_UTILS_CPP_SRCS ${PROJECT_SOURCE_DIR}/common/utils/*.cc)
+
+message(STATUS ${COMMON_CPP_SRCS})
+message(STATUS ${COMMON_CUDA_SRCS})
+
+macro(add_common)
+    message(STATUS "[${ARGV0}] Adding common")
+    target_sources(${ARGV0} PUBLIC ${COMMON_CUDA_SRCS})
+    target_sources(${ARGV0} PUBLIC ${COMMON_CPP_SRCS})
+    target_include_directories(${ARGV0} PUBLIC ${PROJECT_SOURCE_DIR})
+endmacro()
+
+macro(add_common_utils)
+    message(STATUS "[${ARGV0}] Adding common utils")
+    target_sources(${ARGV0} PUBLIC ${COMMON_UTILS_CPP_SRCS})
+    target_include_directories(${ARGV0} PUBLIC ${PROJECT_SOURCE_DIR})
+endmacro()
+
+###############################################
+#   Benchmark
+###############################################
+
+# Create python bindings target
+
 set(CUDA_SRCS src/benchmark_cpp/kernel_python_bindings.cu)
-set_source_files_properties(${CUDA_SRCS} PROPERTIES LANGUAGE CUDA)
 pybind11_add_module(kernel_python_bindings ${CUDA_SRCS})
+
 target_compile_options(kernel_python_bindings INTERFACE $<$<COMPILE_LANGUAGE:CUDA>:${CMAKE_CUDA_FLAGS}>)
 add_kernel_sputnik(kernel_python_bindings)
+add_common(kernel_python_bindings)
+
+
+###############################################
+#   Tools
+###############################################
+
+## Create kernel driver target for profiling
+
+set(CUDA_SRCS tools/kernel_driver.cu)
+add_executable(kernel_driver ${CUDA_SRCS})
+
+target_compile_options(kernel_driver INTERFACE $<$<COMPILE_LANGUAGE:CUDA>:${CMAKE_CUDA_FLAGS}>)
+add_kernel_sputnik(kernel_driver)
+add_common(kernel_driver)
+
+## Row similarity
+
+add_executable(row_similarity tools/row_similarity.cc)
+add_common_utils(row_similarity)
+
+find_package(Boost REQUIRED)
+target_link_libraries(row_similarity PUBLIC Boost::boost)
+
+## Stride check
+
+add_executable(stride_check tools/stride_check.cc)
+add_common_utils(stride_check)
+
+find_package(Boost REQUIRED)
+target_link_libraries(stride_check PUBLIC Boost::boost)

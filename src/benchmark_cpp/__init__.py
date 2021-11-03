@@ -33,7 +33,7 @@ else:
     if build_dir_path not in sys.path:
         sys.path.append(build_dir_path)
 
-    print("using", build_dir)
+    print("Benchmark CPP using build path", build_dir)
     from kernel_python_bindings import *
     # TODO Find a better way of doing this
     sgk_scipy = scipy_spmm_kernel_decorator(sgk)
