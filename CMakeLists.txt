@@ -64,12 +64,12 @@ endmacro()
 
 # Create python bindings target
 
-set(CUDA_SRCS src/benchmark_cpp/kernel_python_bindings.cu)
-pybind11_add_module(kernel_python_bindings ${CUDA_SRCS})
+# set(CUDA_SRCS src/benchmark_cpp/kernel_python_bindings.cu)
+# pybind11_add_module(kernel_python_bindings ${CUDA_SRCS})
 
-target_compile_options(kernel_python_bindings INTERFACE $<$<COMPILE_LANGUAGE:CUDA>:${CMAKE_CUDA_FLAGS}>)
-add_kernel_sputnik(kernel_python_bindings)
-add_common(kernel_python_bindings)
+# target_compile_options(kernel_python_bindings INTERFACE $<$<COMPILE_LANGUAGE:CUDA>:${CMAKE_CUDA_FLAGS}>)
+# add_kernel_sputnik(kernel_python_bindings)
+# add_common(kernel_python_bindings)
 
 
 ###############################################
@@ -100,3 +100,12 @@ add_common_utils(stride_check)
 
 find_package(Boost REQUIRED)
 target_link_libraries(stride_check PUBLIC Boost::boost)
+
+## Synthetic codelets
+
+set(CUDA_SRCS tools/synthetic_codlets.cu)
+add_executable(synthetic_codelets ${CUDA_SRCS})
+target_compile_options(synthetic_codelets INTERFACE $<$<COMPILE_LANGUAGE:CUDA>:${CMAKE_CUDA_FLAGS}>)
+add_cupti_profiler(synthetic_codelets)
+add_common_utils(synthetic_codelets)
+add_kernel_sputnik(synthetic_codelets)
