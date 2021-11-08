@@ -19,7 +19,7 @@ function(define_lib_hook)
     if(DEFINED DEFINE_LIB_HOOK_PREFIX)
         set(HOOK_NAME add_${DEFINE_LIB_HOOK_PREFIX}_${NAME})
     else()
-        set(HOOK_NAME add_lib_${NAME})
+        set(HOOK_NAME add_${NAME})
     endif()
 
     message(STATUS "Creating hook ${HOOK_NAME}")

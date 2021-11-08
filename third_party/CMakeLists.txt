@@ -14,5 +14,15 @@ define_lib_hook(PREFIX kernel
     LIB_PATH "kernels/sputnik/sputnik"
 )
 
+# `add_cupti_profiler(<target>)`
+cuda_find_library(CUPTI_LIBRARY cupti_static)
+cuda_find_library(CUDA_LIBRARY cuda)
+define_lib_hook(
+    NAME cupti_profiler
+    INCLUDE_PATH "cupti_profiler/include"
+    LIB_NAME "${CUPTI_LIBRARY};${CUDA_LIBRARY}"
+)
+
+
 # No hook needed, use pybind11_add_module
 add_subdirectory(pybind11)
