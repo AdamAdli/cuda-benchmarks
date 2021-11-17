@@ -276,9 +276,6 @@ float test_sgk_spmm(int m, int k, int n, int nonzeros,
                 return length_a > length_b;
             });
 
-  // Copy the ordered row indices to the output.
-  std::memcpy(A_csr_offsets, swizzle_staging.data(), sizeof(int) * m);
-
   return _test_sgk_spmm(
           m, k, n, nonzeros,
           A_csr_values, swizzle_staging.data(), A_csr_offsets, A_csr_columns,

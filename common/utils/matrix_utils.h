@@ -6,6 +6,7 @@
 #define BENCHMARK_MATRIX_UTILS_H
 
 #include <stdlib.h>
+#include <iostream>
 
 template<typename ValueType>
 class CSR {
@@ -17,6 +18,13 @@ public:
 
     CSR(int rows, int cols, int nnz);
     ~CSR();
+
+    // Shallow copy
+    CSR(const CSR &t): rows(t.rows), cols(t.cols), nnz(t.nnz),
+      values(t.values), row_offsets(t.row_offsets), col_indices(t.col_indices)
+    { }
+
+    CSR& operator = (const CSR &t) { return CSR<ValueType>(*this); }
 };
 
 template<typename ValueType>
@@ -42,9 +50,9 @@ CSR<ValueType>::CSR(int rows, int cols, int nnz): rows(rows), cols(cols), nnz(nn
 
 template<typename ValueType>
 CSR<ValueType>::~CSR() {
-  delete[] values;
-  delete[] row_offsets;
-  delete[] col_indices;
+//  delete[] values;
+//  delete[] row_offsets;
+//  delete[] col_indices;
 }
 
 template<typename ValueType>
