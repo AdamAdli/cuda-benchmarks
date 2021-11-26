@@ -22,6 +22,17 @@
 
 using namespace std;
 
+#define CHECK_CUDA(func)                                                        \
+    {                                                                           \
+        cudaError_t status = (func);                                            \
+        if (status != cudaSuccess)                                              \
+        {                                                                       \
+            printf("CUDA API failed at %s:%d with error: %s (%d)\n",            \
+                   __FILE__, __LINE__, cudaGetErrorString(status), status);     \
+            return EXIT_FAILURE;                                                \
+        }                                                                       \
+    }
+
 struct Chunks {
   int * col_pattern;
   int * row_pattern;

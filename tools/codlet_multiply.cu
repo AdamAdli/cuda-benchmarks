@@ -18,11 +18,6 @@ float* coeff_ptr(const Dense& A, int i, int j) {
 }
 
 __device__ __forceinline__
-float atomic_add_coeff(Dense& A, int i, int j, float val) {
-  atomicAdd(&A.values[i * A.cols + j], val);
-}
-
-__device__ __forceinline__
 void vec_atomic_add_coeff(Dense& A, int i, int j, float4 val) {
   atomicAdd(&A.values[i * A.cols + j + 0], val.x);
   atomicAdd(&A.values[i * A.cols + j + 1], val.y);
@@ -88,9 +83,9 @@ __global__ void _block_multiply(const Block * blocks, int num_blocks, const CSR<
   __shared__ __align__(32) float B_s[MAX_COLS_PER_BLOCK][TILE_K];
 
   int non_zeros = block->num_rows * block->col_pattern_len;
-  int thread_idx_linear = threadIdx.x + threadIdx.y * blockDim.x;
-  int thread_vec_offset = threadIdx.x * VECTOR_WIDTH;
-  int thread_vec_offset_linear = thread_idx_linear * VECTOR_WIDTH;
+  int thd_idx_linear = threadIdx.x + threadIdx.y * blockDim.x;
+  int thd_x_vec_offset = threadIdx.x * VECTOR_WIDTH;
+  int thd_linear_vec_offset = thd_idx_linear * VECTOR_WIDTH;
   int block_size = blockDim.x * blockDim.y;
 
 
@@ -103,16 +98,16 @@ __global__ void _block_multiply(const Block * blocks, int num_blocks, const CSR<
 
   for (int i = 0; i < a_vector_loads_full_block; i ++) {
 
-    int dst_idx = (i * block_size * VECTOR_WIDTH) + (thread_vec_offset_linear);
-    int src_idx = (i * block_size * VECTOR_WIDTH) + (thread_vec_offset_linear);
+    int dst_idx = (i * block_size * VECTOR_WIDTH) + (thd_linear_vec_offset);
+    int src_idx = (i * block_size * VECTOR_WIDTH) + (thd_linear_vec_offset);
 
     vector_load<4>(&A_s[src_idx], &block->row_segment_values[dst_idx]);
   }
 
-  if (thread_idx_linear < a_vector_partial_load) {
+  if (thd_idx_linear < a_vector_partial_load) {
 
-    int dst_idx = (a_vector_loads_partial_block_start) + (thread_vec_offset_linear);
-    int src_idx = (a_vector_loads_partial_block_start) + (thread_vec_offset_linear);
+    int dst_idx = (a_vector_loads_partial_block_start) + (thd_linear_vec_offset);
+    int src_idx = (a_vector_loads_partial_block_start) + (thd_linear_vec_offset);
 
     vector_load<4>(&A_s[src_idx], &block->row_segment_values[dst_idx]);
   }
@@ -124,37 +119,43 @@ __global__ void _block_multiply(const Block * blocks, int num_blocks, const CSR<
     for (int col_pattern_idx = threadIdx.y; col_pattern_idx < block->col_pattern_len; col_pattern_idx += blockDim.y) {
       int col = block->col_pattern[col_pattern_idx];
 
-      vector_load<4>(&B_s[col_pattern_idx][thread_vec_offset], coeff_ptr(B, col, k + thread_vec_offset));
+      vector_load<4>(&B_s[col_pattern_idx][thd_x_vec_offset], coeff_ptr(B, col, k + thd_x_vec_offset));
     }
 
     __syncthreads();
 
-    float4 c[MAX_ROWS_PER_BLOCK / BLOCK_Y_DIM] = {0};
-#pragma unroll
-    for (int row_iter = 0; row_iter < MAX_ROWS_PER_BLOCK / BLOCK_Y_DIM; row_iter++) {
-      c[row_iter] = { .x = 0, .y = 0, .z = 0, .w = 0 };
-    }
+    static_assert(MAX_ROWS_PER_BLOCK / BLOCK_Y_DIM  == 2);
+    float4 c0 = { .x = 0, .y = 0, .z = 0, .w = 0 };
+    float4 c1 = { .x = 0, .y = 0, .z = 0, .w = 0 };
 
     int col_pattern_idx_end_of_aligned = (block->col_pattern_len / 4) * 4;
     for (int col_pattern_idx = 0; col_pattern_idx < col_pattern_idx_end_of_aligned; col_pattern_idx += 4) {
 
-      float4 b0 = vector_load(&B_s[col_pattern_idx + 0][thread_vec_offset]);
-      float4 b1 = vector_load(&B_s[col_pattern_idx + 1][thread_vec_offset]);
-      float4 b2 = vector_load(&B_s[col_pattern_idx + 2][thread_vec_offset]);
-      float4 b3 = vector_load(&B_s[col_pattern_idx + 3][thread_vec_offset]);
+      float4 b0 = vector_load(&B_s[col_pattern_idx + 0][thd_x_vec_offset]);
+      float4 b1 = vector_load(&B_s[col_pattern_idx + 1][thd_x_vec_offset]);
+      float4 b2 = vector_load(&B_s[col_pattern_idx + 2][thd_x_vec_offset]);
+      float4 b3 = vector_load(&B_s[col_pattern_idx + 3][thd_x_vec_offset]);
 
-#pragma unroll
-      for (int row_iter = 0; row_iter < MAX_ROWS_PER_BLOCK / BLOCK_Y_DIM; row_iter++) {
-        int row_idx = (row_iter * blockDim.y + threadIdx.y);
-        int row_offset = row_idx * block->col_pattern_len;
-        float4 a = *reinterpret_cast<float4 *>(&A_s[row_offset + col_pattern_idx + 0]);
+      int row_idx = (0 * blockDim.y + threadIdx.y);
+      int row_offset = row_idx * block->col_pattern_len;
+      float4 a = vector_load(&A_s[row_offset + col_pattern_idx + 0]);
 
-        if (row_idx < block->num_rows) {
-          FMAA(c[row_iter], a.x, b0);
-          FMAA(c[row_iter], a.y, b1);
-          FMAA(c[row_iter], a.z, b2);
-          FMAA(c[row_iter], a.w, b3);
-        }
+      if (row_idx < block->num_rows) {
+        FMAA(c0, a.x, b0);
+        FMAA(c0, a.y, b1);
+        FMAA(c0, a.z, b2);
+        FMAA(c0, a.w, b3);
+      }
+
+      row_idx = (1 * blockDim.y + threadIdx.y);
+      row_offset = row_idx * block->col_pattern_len;
+      a = vector_load(&A_s[row_offset + col_pattern_idx + 0]);
+
+      if (row_idx < block->num_rows) {
+        FMAA(c1, a.x, b0);
+        FMAA(c1, a.y, b1);
+        FMAA(c1, a.z, b2);
+        FMAA(c1, a.w, b3);
       }
 
       __syncthreads();
@@ -163,46 +164,31 @@ __global__ void _block_multiply(const Block * blocks, int num_blocks, const CSR<
     for (int col_pattern_idx = col_pattern_idx_end_of_aligned;
          col_pattern_idx < block->col_pattern_len; col_pattern_idx++) {
 
-#pragma unroll
-      for (int row_iter = 0; row_iter < MAX_ROWS_PER_BLOCK / BLOCK_Y_DIM; row_iter++) {
-        int row_idx = (row_iter * blockDim.y + threadIdx.y);
-        int row_offset = row_idx * block->col_pattern_len;
+      int row_idx = (0 * blockDim.y + threadIdx.y);
+      int row_offset = row_idx * block->col_pattern_len;
+      if (row_idx < block->num_rows) {
+        FMAA(c0, A_s[row_offset + col_pattern_idx + 0], &B_s[col_pattern_idx + 0][thd_x_vec_offset]);
+      }
 
-        if (row_idx < block->num_rows) {
-          FMAA(c[row_iter], A_s[row_offset + col_pattern_idx + 0], &B_s[col_pattern_idx + 0][thread_vec_offset]);
-        }
+      row_idx = (1 * blockDim.y + threadIdx.y);
+      row_offset = row_idx * block->col_pattern_len;
+      if (row_idx < block->num_rows) {
+        FMAA(c1, A_s[row_offset + col_pattern_idx + 0], &B_s[col_pattern_idx + 0][thd_x_vec_offset]);
       }
 
       __syncthreads();
     }
 
-#pragma unroll
-    for (int row_iter = 0;
-         row_iter < MAX_ROWS_PER_BLOCK / BLOCK_Y_DIM; row_iter++) {
-      int row_idx = (row_iter * threadIdx.y);
-      int row_offset = row_idx * block->col_pattern_len;
+    int row_idx = (0 * blockDim.y + threadIdx.y);
+    if (row_idx < block->num_rows) {
+      vec_atomic_add_coeff(C, block->rows[row_idx], k + thd_x_vec_offset, c0);
+    }
 
-      if (row_idx < block->num_rows) {
-        vec_atomic_add_coeff(C, block->rows[(row_idx * threadIdx.y)], k + thread_vec_offset, c[row_iter]);
-      }
+    row_idx = (1 * blockDim.y + threadIdx.y);
+    if (row_idx < block->num_rows) {
+      vec_atomic_add_coeff(C, block->rows[row_idx], k + thd_x_vec_offset, c1);
     }
   }
-
-//      __shared__ __align__(32) float C_s[4][CODELET_MULTIPLY_TILE_K];
-//      *reinterpret_cast<float4 *>(&C_s[threadIdx.y][thread_vec_offset + 0]) = c;
-//      if (coalesced_atomic_add_offset + 4 < block->num_rows) {
-//
-//        atomic_add_coeff(C, block->rows[coalesced_atomic_add_offset + 0], k + thread_idx_linear, C_s[0][thread_idx_linear]);
-//        atomic_add_coeff(C, block->rows[coalesced_atomic_add_offset + 1], k + thread_idx_linear, C_s[1][thread_idx_linear]);
-//        atomic_add_coeff(C, block->rows[coalesced_atomic_add_offset + 2], k + thread_idx_linear, C_s[2][thread_idx_linear]);
-//        atomic_add_coeff(C, block->rows[coalesced_atomic_add_offset + 3], k + thread_idx_linear, C_s[3][thread_idx_linear]);
-//
-//        coalesced_atomic_add_offset += 4;
-//      } else {
-//        for (int i = 0; coalesced_atomic_add_offset < block->num_rows; coalesced_atomic_add_offset++, i++) {
-//          atomic_add_coeff(C, block->rows[coalesced_atomic_add_offset], k + thread_idx_linear, C_s[i][thread_idx_linear]);
-//        }
-//      };
 }
 
 int CodeletMultiply::codelet_multiply(cudaStream_t& stream, cudaEvent_t& start, cudaEvent_t& stop, const Block * blocks, size_t num_blocks,
