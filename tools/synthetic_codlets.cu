@@ -14,102 +14,13 @@
 #include <array>
 #include <numeric>
 #include "common/utils/matrix_utils.h"
+#include "common/utils/cuda_utils.h"
 #include "sputnik/sputnik.h"
 
-// cuBLAS API errors
-static const char *_cudaGetErrorEnum(cublasStatus_t error)
-{
-  switch (error)
-  {
-    case CUBLAS_STATUS_SUCCESS:
-      return "CUBLAS_STATUS_SUCCESS";
-
-    case CUBLAS_STATUS_NOT_INITIALIZED:
-      return "CUBLAS_STATUS_NOT_INITIALIZED";
-
-    case CUBLAS_STATUS_ALLOC_FAILED:
-      return "CUBLAS_STATUS_ALLOC_FAILED";
-
-    case CUBLAS_STATUS_INVALID_VALUE:
-      return "CUBLAS_STATUS_INVALID_VALUE";
-
-    case CUBLAS_STATUS_ARCH_MISMATCH:
-      return "CUBLAS_STATUS_ARCH_MISMATCH";
-
-    case CUBLAS_STATUS_MAPPING_ERROR:
-      return "CUBLAS_STATUS_MAPPING_ERROR";
-
-    case CUBLAS_STATUS_EXECUTION_FAILED:
-      return "CUBLAS_STATUS_EXECUTION_FAILED";
-
-    case CUBLAS_STATUS_INTERNAL_ERROR:
-      return "CUBLAS_STATUS_INTERNAL_ERROR";
-  }
-
-  return "<unknown>";
-}
-
-#define CHECK_CUDA(func)                                                        \
-    {                                                                           \
-        cudaError_t status = (func);                                            \
-        if (status != cudaSuccess)                                              \
-        {                                                                       \
-            printf("CUDA API failed at %s:%d with error: %s (%d)\n",            \
-                   __FILE__, __LINE__, cudaGetErrorString(status), status);     \
-            return EXIT_FAILURE;                                                \
-        }                                                                       \
-    }
-
-#define CHECK_CUSPARSE(func)                                                    \
-    {                                                                           \
-        cusparseStatus_t status = (func);                                       \
-        if (status != CUSPARSE_STATUS_SUCCESS)                                  \
-        {                                                                       \
-            printf("CUSPARSE API failed at %s:%d with error: %s (%d)\n",        \
-                   __FILE__, __LINE__, cusparseGetErrorString(status), status); \
-            return EXIT_FAILURE;                                                \
-        }                                                                       \
-    }
-
-#define CHECK_CUBLAS(func)                                                    \
-    {                                                                           \
-        cublasStatus_t status = (func);                                         \
-        if (status != CUBLAS_STATUS_SUCCESS)                                    \
-        {                                                                       \
-            printf("CUSPARSE API failed at %s:%d with error: %s (%d)\n",        \
-                   __FILE__, __LINE__, _cudaGetErrorEnum(status), status);       \
-            return EXIT_FAILURE;                                                \
-        }                                                                       \
-    }
-
+#include "synthetic_codlets.cuh"
+#include "codlet_multiply.cuh"
 
 using namespace std;
-
-typedef struct Dense {
-    int rows;
-    int cols;
-    float * values;
-
-    Dense(int m, int n, float fill_val): rows(m), cols(n) {
-      values = new float[rows * cols];
-      for (int i = 0; i < rows * cols; i++) values[i] = fill_val;
-    }
-
-    Dense(int m, int n, float * values): rows(m), cols(n), values(values) {}
-
-    float coeff(int i, int j) const {
-      return values[i * cols + j];
-    }
-
-    inline void set_coeff(int i, int j, float val) {
-      values[i * cols + j] = val;
-    }
-
-    void fill(float fill_val) {
-      for (int i = 0; i < rows * cols; i++) values[i] = fill_val;
-    }
-
-} Dense;
 
 struct Chunks {
   int * col_pattern;
@@ -125,7 +36,7 @@ struct Chunks {
 //}
 
 static const int TILE_DIM = 32;
-static const int ITERATIONS = 10;
+static const int ITERATIONS = 1;
 
 int cublas_multiply(cudaStream_t& stream, cudaEvent_t& start, cudaEvent_t& stop, const Dense& A, const Dense& B, Dense& C)
 {
@@ -195,108 +106,6 @@ int dense_multiply(cudaStream_t& stream, cudaEvent_t& start, cudaEvent_t& stop, 
 
   return 0;
 }
-
-static const int BLOCK_MULTIPLY_TILE_K = 32;
-static const int BLOCK_MULTIPLY_MAX_COLS_PER_BLOCK = 16;
-static const int BLOCK_MULTIPLY_MAX_ROWS_PER_BLOCK = 8;
-
-typedef struct {
-  int * col_pattern;
-  int col_pattern_len;
-  int * rows;
-  int num_rows;
-  float * row_segment_values;
-
-  float coeff(int row, int col_pattern_idx) const {
-    return row_segment_values[row * col_pattern_len + col_pattern_idx];
-  }
-} Block;
-
-__device__ __forceinline__ float coeff(const Dense& A, int i, int j) {
-  return A.values[i * A.cols + j];
-}
-
-__device__ __forceinline__ float atomic_add_coeff(Dense& A, int i, int j, float val) {
-  atomicAdd(&A.values[i * A.cols + j], val);
-}
-
-__device__ __forceinline__ float coeff(const Block& A, int row, int col_pattern_idx) {
-  return A.row_segment_values[row * A.col_pattern_len + col_pattern_idx];
-}
-
-// Taken from: https://stackoverflow.com/a/18856054
-__global__ void _block_multiply(const Block * blocks, int num_blocks, const CSR<float> A, const Dense B, Dense C) {
-  int block_idx = blockIdx.x;
-
-  const Block *block = &blocks[block_idx];
-
-  // TODO: make BLOCK_MULTIPLY_MAX_COLS_PER_BLOCK dynamic
-  __shared__ float A_s[BLOCK_MULTIPLY_MAX_ROWS_PER_BLOCK * BLOCK_MULTIPLY_MAX_COLS_PER_BLOCK];
-  __shared__ float B_s[BLOCK_MULTIPLY_MAX_COLS_PER_BLOCK][BLOCK_MULTIPLY_TILE_K];
-  __shared__ float C_s[BLOCK_MULTIPLY_MAX_ROWS_PER_BLOCK][BLOCK_MULTIPLY_TILE_K];
-
-  int non_zeros = block->num_rows * block->col_pattern_len;
-  int full_loads = non_zeros / BLOCK_MULTIPLY_TILE_K;
-  int full_loads_end = full_loads * BLOCK_MULTIPLY_TILE_K;
-  int partial_load = non_zeros - full_loads_end;
-
-  for (int i = 0; i < full_loads; i ++) {
-    A_s[i * BLOCK_MULTIPLY_TILE_K + threadIdx.x] = block->row_segment_values[i * BLOCK_MULTIPLY_TILE_K + threadIdx.x];
-  }
-
-  if (threadIdx.x < partial_load) {
-    A_s[full_loads_end + threadIdx.x] = block->row_segment_values[full_loads_end + threadIdx.x];
-  }
-
-  for (int k = 0; k < B.cols; k+= BLOCK_MULTIPLY_TILE_K) {
-    __syncthreads();
-
-    for (int row_idx = 0; row_idx < block->num_rows; row_idx++) {
-      C_s[row_idx][threadIdx.x] = 0;
-    }
-
-    for (int col_pattern_idx = 0; col_pattern_idx < block->col_pattern_len; col_pattern_idx++) {
-      int col = block->col_pattern[col_pattern_idx];
-
-      // Cooperative loading
-      static_assert(BLOCK_MULTIPLY_TILE_K == 32);
-      B_s[col_pattern_idx][threadIdx.x] = coeff(B, col, k + threadIdx.x);
-
-    }
-
-    __syncthreads();
-
-    for (int row_idx = 0; row_idx < block->num_rows; row_idx++) {
-      for (int col_pattern_idx = 0; col_pattern_idx < block->col_pattern_len; col_pattern_idx++) {
-        C_s[row_idx][threadIdx.x] += B_s[col_pattern_idx][threadIdx.x] * A_s[row_idx * block->col_pattern_len + col_pattern_idx];
-      }
-    }
-
-    __syncthreads();
-
-    for (int row_idx = 0; row_idx < block->num_rows; row_idx++) {
-      atomic_add_coeff(C, block->rows[row_idx], k + threadIdx.x, C_s[row_idx][threadIdx.x]);
-    }
-
-    __syncthreads();
-  }
-}
-
-
-int codelet_multiply(cudaStream_t& stream, cudaEvent_t& start, cudaEvent_t& stop, const Block * blocks, size_t num_blocks,
-                     const CSR<float>& A_h, const CSR<float>& A, const Dense& B, Dense& C) {
-  dim3 block_dim(BLOCK_MULTIPLY_TILE_K, 1);
-  dim3 grid_dim(num_blocks, 1);
-
-  cudaEventRecord(start, stream);
-  _block_multiply<<<grid_dim, block_dim, 0, stream>>>(blocks, num_blocks, A, B, C);
-  CHECK_CUDA(cudaGetLastError());
-  cudaEventRecord(stop, stream);
-
-  return 0;
-}
-
-
 
 int sgk_multiply(cudaStream_t& stream, cudaEvent_t& start, cudaEvent_t& stop, const CSR<float>& A_h, const CSR<float>& A, const Dense& B, Dense& C) {
   float* bias = nullptr;
@@ -454,12 +263,12 @@ int run_kernel(const CSR<float>& A, const Dense& B, Dense& C, const std::string&
   return 0;
 }
 
-int run_kernel(const std::vector<Block> &blocks, const CSR<float>& A, const Dense& B, Dense& C, const std::string& name,
-               int(*kernel)(cudaStream_t& stream, cudaEvent_t& start, cudaEvent_t& stop, const Block * blocks, size_t num_blocks, const CSR<float>& A_h, const CSR<float>& A, const Dense& B, Dense& C)) {
+int run_kernel(const std::vector<CodeletMultiply::Block> &blocks, const CSR<float>& A, const Dense& B, Dense& C, const std::string& name,
+               int(*kernel)(cudaStream_t& stream, cudaEvent_t& start, cudaEvent_t& stop, const CodeletMultiply::Block * blocks, size_t num_blocks, const CSR<float>& A_h, const CSR<float>& A, const Dense& B, Dense& C)) {
   float *A_values_d, *B_values_d, *C_values_d;
   int *A_row_offsets_d, *A_col_indices_d;
-  std::vector<Block> blocks_d_temp(blocks);
-  Block* blocks_d;
+  std::vector<CodeletMultiply::Block> blocks_d_temp(blocks);
+  CodeletMultiply::Block* blocks_d;
 
   CHECK_CUDA(cudaMalloc(&A_values_d, A.nnz * sizeof(float)));
   CHECK_CUDA(cudaMalloc(&A_row_offsets_d, (A.rows + 1) * sizeof(int)));
@@ -476,8 +285,8 @@ int run_kernel(const std::vector<Block> &blocks, const CSR<float>& A, const Dens
     CHECK_CUDA(cudaMemcpy(blocks_d_temp[i].row_segment_values, blocks[i].row_segment_values, blocks_d_temp[i].num_rows * blocks_d_temp[i].col_pattern_len * sizeof(float), cudaMemcpyHostToDevice));
   }
 
-  CHECK_CUDA(cudaMalloc(&blocks_d, blocks_d_temp.size() * sizeof(Block)));
-  CHECK_CUDA(cudaMemcpy(blocks_d, blocks_d_temp.data(), blocks_d_temp.size() * sizeof(Block), cudaMemcpyHostToDevice));
+  CHECK_CUDA(cudaMalloc(&blocks_d, blocks_d_temp.size() * sizeof(CodeletMultiply::Block)));
+  CHECK_CUDA(cudaMemcpy(blocks_d, blocks_d_temp.data(), blocks_d_temp.size() * sizeof(CodeletMultiply::Block), cudaMemcpyHostToDevice));
 
   CHECK_CUDA(cudaMalloc(&B_values_d, B.rows * B.cols * sizeof(float)));
   CHECK_CUDA(cudaMalloc(&C_values_d, C.rows * C.cols * sizeof(float)));
@@ -550,24 +359,24 @@ typedef struct codelet {
   std::vector<int> col_offsets;
 } codelet_t;
 
-static const inline int partition_evenly(int size, int target) {
+static inline int partition_evenly(int size, int target) {
   int blocks = (size + target - 1) / target;
   return (size + blocks - 1) / blocks;
 }
 
-const std::vector<Block> gen_blocks(const std::vector<codelet_t>& codelets) {
-  std::vector<Block> blocks;
+const std::vector<CodeletMultiply::Block> gen_blocks(const std::vector<codelet_t>& codelets) {
+  std::vector<CodeletMultiply::Block> blocks;
 
   for (auto& codelet : codelets) {
-    int cols_per_block = partition_evenly(codelet.col_offsets.size(), BLOCK_MULTIPLY_MAX_COLS_PER_BLOCK);
-    int rows_per_block = partition_evenly(codelet.row_offsets.size(), BLOCK_MULTIPLY_MAX_ROWS_PER_BLOCK);
+    int cols_per_block = partition_evenly(codelet.col_offsets.size(), CodeletMultiply::MAX_COLS_PER_BLOCK);
+    int rows_per_block = partition_evenly(codelet.row_offsets.size(), CodeletMultiply::MAX_ROWS_PER_BLOCK);
 
     for (int i = 0; i < codelet.row_offsets.size(); i+= rows_per_block) {
       for (int j = 0; j < codelet.col_offsets.size(); j+= cols_per_block) {
         int rows_in_block = std::min(codelet.row_offsets.size() - i, (size_t) rows_per_block);
         int cols_in_block = std::min(codelet.col_offsets.size() - i, (size_t) cols_per_block);
 
-        Block blk;
+        CodeletMultiply::Block blk;
         blk.num_rows = rows_in_block;
         blk.col_pattern_len = cols_in_block;
         blk.rows = new int[rows_in_block];
@@ -665,7 +474,7 @@ void compare_dense(const Dense &A, const Dense &B) {
       if (A.coeff(i, j) != B.coeff(i, j)) {
         total_errors++;
         if (total_errors < 10) {
-          printf("[ERROR] Mismatch at (%d, %d)\n", i, j);
+          printf("[ERROR] Mismatch at (%d, %d) %f != %f\n", i, j, A.coeff(i, j), B.coeff(i, j));
         }
       }
     }
@@ -723,7 +532,7 @@ int main() {
   run_kernel(csr, B, C, "sgk", sgk_multiply);
   compare_dense(C_golden, C);
   C.fill(0);
-  run_kernel(blocks, csr, B, C, "codelets", codelet_multiply);
+  run_kernel(blocks, csr, B, C, "codelets", CodeletMultiply::codelet_multiply);
   compare_dense(C_golden, C);
 
   delete A.values;
