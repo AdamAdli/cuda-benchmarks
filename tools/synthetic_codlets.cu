@@ -286,10 +286,12 @@ int run_kernel(const std::vector<CodeletMultiply::Block> &blocks, const CSR<floa
   CHECK_CUDA(cudaMalloc(&A_col_indices_d, A.nnz * sizeof(int)));
 
   for (int i = 0; i < blocks.size(); i++) {
-    CHECK_CUDA(cudaMalloc(&blocks_d_temp[i].rows, blocks_d_temp[i].num_rows * sizeof(int)));
+    size_t num_rows_padded = ((blocks_d_temp[i].num_rows * sizeof(int) * 3) / 4) * 4;
+    CHECK_CUDA(cudaMalloc(&blocks_d_temp[i].rows, num_rows_padded));
     CHECK_CUDA(cudaMemcpy(blocks_d_temp[i].rows, blocks[i].rows, blocks_d_temp[i].num_rows * sizeof(int), cudaMemcpyHostToDevice));
 
-    CHECK_CUDA(cudaMalloc(&blocks_d_temp[i].col_pattern, blocks_d_temp[i].col_pattern_len * sizeof(int)));
+    size_t col_pattern_len_padded = ((blocks_d_temp[i].col_pattern_len * sizeof(int) * 3) / 4) * 4;
+    CHECK_CUDA(cudaMalloc(&blocks_d_temp[i].col_pattern, col_pattern_len_padded));
     CHECK_CUDA(cudaMemcpy(blocks_d_temp[i].col_pattern, blocks[i].col_pattern, blocks_d_temp[i].col_pattern_len * sizeof(int), cudaMemcpyHostToDevice));
 
     CHECK_CUDA(cudaMalloc(&blocks_d_temp[i].row_segment_values, blocks_d_temp[i].num_rows * blocks_d_temp[i].col_pattern_len * sizeof(float)));
@@ -405,6 +407,9 @@ const std::vector<CodeletMultiply::Block> gen_blocks(const std::vector<codelet_t
       }
     }
   }
+
+
+  std::cout << "num blocks = " << blocks.size() << std::endl;
 
   return blocks;
 }
