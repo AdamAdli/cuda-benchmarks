@@ -33,7 +33,7 @@ void write_csv_row(
   bool write_header = false;
 
   auto keys_view = ranges::views::keys(log);
-  auto column_names = std::set(keys_view.begin(), keys_view.end());
+  auto column_names = std::set<std::string>(keys_view.begin(), keys_view.end());
 
   if (file_cache == csv_files_cache.end()) {
     // First time we have seen this file so we need to open up a `ofstream` and initialize the column names

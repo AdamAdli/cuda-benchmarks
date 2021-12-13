@@ -7,6 +7,18 @@
 
 include(ExternalProject)
 
+#
+#   Environment
+#
+
+IF(NOT DEFINED DOWNLOAD_DEPENDENCY_GIT_USE_SSH)
+    set(DOWNLOAD_DEPENDENCY_GIT_USE_SSH TRUE)
+ENDIF()
+
+#
+#   Library Function
+#
+
 function(download_dependency)
     set(options
             HEADER_ONLY

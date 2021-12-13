@@ -5,7 +5,7 @@
 #include "codelet_kernel_utils.cuh"
 
 using namespace CodeletMultiply;
-using namespace codelet_8x32x1;
+using namespace codelet_4x32x1;
 
 /// This example streams elementsPerThreadBlock worth of data from global memory
 /// into a limited sized shared memory (elementsInShared) block to operate on in
@@ -263,7 +263,7 @@ _block_multiply_reg_storage_bypass_8x32x1(const Block * blocks, int num_blocks, 
     b##reg = shared_const_vector_load(&B_async[idx][thd_x_vec_offset]);             \
 
 
-__global__ void _block_multiply_reg_storage_orig_8x32x1(const Block * blocks,
+__global__ void _block_multiply_reg_storage_orig_4x32x1(const Block * blocks,
                                                         int num_blocks,
                                                         const CSR<float> A,
                                                         const Dense B, Dense C) {
@@ -319,195 +319,135 @@ __global__ void _block_multiply_reg_storage_orig_8x32x1(const Block * blocks,
 
   cg::wait_prior<1>(tb); // Wait for block_col_pattern
 
+  float4 a0;
+  float4 a1;
+  float4 a2;
+  float4 a3;
+  float4 a4;
+  float4 a5;
+  float4 a6;
+  float4 a7;
+
+  int row_idx0 = (0 * blockDim.y + threadIdx.y);
+  int row_offset0 = row_idx0 * block_col_pattern_len;
+
   for (int k = 0; k < B_cols; k+= TILE_K) {
 
-    static_assert(MAX_ROWS_PER_BLOCK / BLOCK_Y_DIM  == 2);
+    static_assert(MAX_ROWS_PER_BLOCK / BLOCK_Y_DIM  == 1);
     float4 c0 = { .x = 0, .y = 0, .z = 0, .w = 0 };
-    float4 c1 = { .x = 0, .y = 0, .z = 0, .w = 0 };
 
-    int col_pattern_idx = 0;
-    //for (int col_pattern_idx = 0; col_pattern_idx < BLOCK_COLS; col_pattern_idx += 32) {
-      float4 b0, b1, b2, b3, b4, b5, b6, b7;
-      float4 b8, b9, b10, b11, b12, b13, b14, b15;
+    float4 b0, b1, b2, b3, b4, b5, b6, b7;
+    float4 b8, b9, b10, b11, b12, b13, b14, b15;
 
-      float4 b16, b17, b18, b19, b20, b21, b22, b23;
-      float4 b24, b25, b26, b27, b28, b29, b30, b31;
+    float4 b16, b17, b18, b19, b20, b21, b22, b23;
+    float4 b24, b25, b26, b27, b28, b29, b30, b31;
 
-      _load_b_reg_branchless(col_pattern_idx, 0, 0);
-      _load_b_reg_branchless(col_pattern_idx, 1, 1);
-      _load_b_reg_branchless(col_pattern_idx, 2, 2);
-      _load_b_reg_branchless(col_pattern_idx, 3, 3);
-      _load_b_reg_branchless(col_pattern_idx, 4, 4);
-      _load_b_reg_branchless(col_pattern_idx, 5, 5);
-      _load_b_reg_branchless(col_pattern_idx, 6, 6);
-      _load_b_reg_branchless(col_pattern_idx, 7, 7);
+    _load_b_reg_branchless(0, 0, 0);
+    _load_b_reg_branchless(0, 1, 1);
+    _load_b_reg_branchless(0, 2, 2);
+    _load_b_reg_branchless(0, 3, 3);
+    _load_b_reg_branchless(0, 4, 4);
+    _load_b_reg_branchless(0, 5, 5);
+    _load_b_reg_branchless(0, 6, 6);
+    _load_b_reg_branchless(0, 7, 7);
 
-      _load_b_reg_branchless(col_pattern_idx, 8, 8);
-      _load_b_reg_branchless(col_pattern_idx, 9, 9);
-      _load_b_reg_branchless(col_pattern_idx, 10, 10);
-      _load_b_reg_branchless(col_pattern_idx, 11, 11);
-      _load_b_reg_branchless(col_pattern_idx, 12, 12);
-      _load_b_reg_branchless(col_pattern_idx, 13, 13);
-      _load_b_reg_branchless(col_pattern_idx, 14, 14);
-      _load_b_reg_branchless(col_pattern_idx, 15, 15);
+    _load_b_reg_branchless(0, 8, 8);
+    _load_b_reg_branchless(0, 9, 9);
+    _load_b_reg_branchless(0, 10, 10);
+    _load_b_reg_branchless(0, 11, 11);
+    _load_b_reg_branchless(0, 12, 12);
+    _load_b_reg_branchless(0, 13, 13);
+    _load_b_reg_branchless(0, 14, 14);
+    _load_b_reg_branchless(0, 15, 15);
 
-      if (k == 0 && col_pattern_idx == 0) {
-        cg::wait_prior<2>(tb); // Wait for A_s, A_rows
-      }
+    if (k == 0) {
+      cg::wait_prior<2>(tb); // Wait for A_s, A_rows
 
-      int row_idx0 = (0 * blockDim.y + threadIdx.y);
-      int row_offset0 = row_idx0 * block_col_pattern_len;
-      float4 a0 = shared_const_vector_load(&A_s[row_offset0 + col_pattern_idx + 0]);
-      float4 a1 = shared_const_vector_load(&A_s[row_offset0 + col_pattern_idx + 4]);
-      float4 a2 = shared_const_vector_load(&A_s[row_offset0 + col_pattern_idx + 8]);
-      float4 a3 = shared_const_vector_load(&A_s[row_offset0 + col_pattern_idx + 12]);
-      float4 a4 = shared_const_vector_load(&A_s[row_offset0 + col_pattern_idx + 16]);
-      float4 a5 = shared_const_vector_load(&A_s[row_offset0 + col_pattern_idx + 20]);
-      float4 a6 = shared_const_vector_load(&A_s[row_offset0 + col_pattern_idx + 24]);
-      float4 a7 = shared_const_vector_load(&A_s[row_offset0 + col_pattern_idx + 28]);
+      a0 = shared_const_vector_load(&A_s[row_offset0 + 0]);
+      a1 = shared_const_vector_load(&A_s[row_offset0 + 4]);
+      a2 = shared_const_vector_load(&A_s[row_offset0 + 8]);
+      a3 = shared_const_vector_load(&A_s[row_offset0 + 12]);
+      a4 = shared_const_vector_load(&A_s[row_offset0 + 16]);
+      a5 = shared_const_vector_load(&A_s[row_offset0 + 20]);
+      a6 = shared_const_vector_load(&A_s[row_offset0 + 24]);
+      a7 = shared_const_vector_load(&A_s[row_offset0 + 28]);
+    }
 
-      _load_b_reg_branchless(col_pattern_idx, 16, 16);
-      _load_b_reg_branchless(col_pattern_idx, 17, 17);
-      _load_b_reg_branchless(col_pattern_idx, 18, 18);
-      _load_b_reg_branchless(col_pattern_idx, 19, 19);
-      _load_b_reg_branchless(col_pattern_idx, 20, 20);
-      _load_b_reg_branchless(col_pattern_idx, 21, 21);
-      _load_b_reg_branchless(col_pattern_idx, 22, 22);
-      _load_b_reg_branchless(col_pattern_idx, 23, 23);
+    _load_b_reg_branchless(0, 16, 16);
+    _load_b_reg_branchless(0, 17, 17);
+    _load_b_reg_branchless(0, 18, 18);
+    _load_b_reg_branchless(0, 19, 19);
+    _load_b_reg_branchless(0, 20, 20);
+    _load_b_reg_branchless(0, 21, 21);
+    _load_b_reg_branchless(0, 22, 22);
+    _load_b_reg_branchless(0, 23, 23);
 
-      _load_b_reg_branchless(col_pattern_idx, 24, 24);
-      _load_b_reg_branchless(col_pattern_idx, 25, 25);
-      _load_b_reg_branchless(col_pattern_idx, 26, 26);
-      _load_b_reg_branchless(col_pattern_idx, 27, 27);
-      _load_b_reg_branchless(col_pattern_idx, 28, 28);
-      _load_b_reg_branchless(col_pattern_idx, 29, 29);
-      _load_b_reg_branchless(col_pattern_idx, 30, 30);
-      _load_b_reg_branchless(col_pattern_idx, 31, 31);
+    _load_b_reg_branchless(0, 24, 24);
+    _load_b_reg_branchless(0, 25, 25);
+    _load_b_reg_branchless(0, 26, 26);
+    _load_b_reg_branchless(0, 27, 27);
+    _load_b_reg_branchless(0, 28, 28);
+    _load_b_reg_branchless(0, 29, 29);
+    _load_b_reg_branchless(0, 30, 30);
+    _load_b_reg_branchless(0, 31, 31);
 
+    FMAA(c0, a0.x, b0);
+    FMAA(c0, a0.y, b1);
+    FMAA(c0, a0.z, b2);
+    FMAA(c0, a0.w, b3);
+    FMAA(c0, a1.x, b4);
+    FMAA(c0, a1.y, b5);
+    FMAA(c0, a1.z, b6);
+    FMAA(c0, a1.w, b7);
 
-      int row_idx1 = (1 * blockDim.y + threadIdx.y);
-      int row_offset1 = row_idx1 * block_col_pattern_len;
-      float4 a8  = shared_const_vector_load(&A_s[row_offset1 + col_pattern_idx + 0]);
-      float4 a9  = shared_const_vector_load(&A_s[row_offset1 + col_pattern_idx + 4]);
-      float4 a10 = shared_const_vector_load(&A_s[row_offset1 + col_pattern_idx + 8]);
-      float4 a11 = shared_const_vector_load(&A_s[row_offset1 + col_pattern_idx + 12]);
-      float4 a12 = shared_const_vector_load(&A_s[row_offset1 + col_pattern_idx + 16]);
-      float4 a13 = shared_const_vector_load(&A_s[row_offset1 + col_pattern_idx + 20]);
-      float4 a14 = shared_const_vector_load(&A_s[row_offset1 + col_pattern_idx + 24]);
-      float4 a15 = shared_const_vector_load(&A_s[row_offset1 + col_pattern_idx + 28]);
+    FMAA(c0, a2.x, b8);
+    FMAA(c0, a2.y, b9);
+    FMAA(c0, a2.z, b10);
+    FMAA(c0, a2.w, b11);
+    FMAA(c0, a3.x, b12);
+    FMAA(c0, a3.y, b13);
+    FMAA(c0, a3.z, b14);
+    FMAA(c0, a3.w, b15);
 
-      //if (row_idx < block->num_rows) {
-      FMAA(c0, a0.x, b0);
-      FMAA(c0, a0.y, b1);
-      FMAA(c0, a0.z, b2);
-      FMAA(c0, a0.w, b3);
-      FMAA(c0, a1.x, b4);
-      FMAA(c0, a1.y, b5);
-      FMAA(c0, a1.z, b6);
-      FMAA(c0, a1.w, b7);
+    FMAA(c0, a4.x, b16);
+    FMAA(c0, a4.y, b17);
+    FMAA(c0, a4.z, b18);
+    FMAA(c0, a4.w, b19);
+    FMAA(c0, a5.x, b20);
+    FMAA(c0, a5.y, b21);
+    FMAA(c0, a5.z, b22);
+    FMAA(c0, a5.w, b23);
 
-      FMAA(c0, a2.x, b8);
-      FMAA(c0, a2.y, b9);
-      FMAA(c0, a2.z, b10);
-      FMAA(c0, a2.w, b11);
-      FMAA(c0, a3.x, b12);
-      FMAA(c0, a3.y, b13);
-      FMAA(c0, a3.z, b14);
-      FMAA(c0, a3.w, b15);
+    FMAA(c0, a6.x, b24);
+    FMAA(c0, a6.y, b25);
+    FMAA(c0, a6.z, b26);
+    FMAA(c0, a6.w, b27);
+    FMAA(c0, a7.x, b28);
+    FMAA(c0, a7.y, b29);
+    FMAA(c0, a7.z, b30);
+    FMAA(c0, a7.w, b31);
 
-      FMAA(c0, a4.x, b16);
-      FMAA(c0, a4.y, b17);
-      FMAA(c0, a4.z, b18);
-      FMAA(c0, a4.w, b19);
-      FMAA(c0, a5.x, b20);
-      FMAA(c0, a5.y, b21);
-      FMAA(c0, a5.z, b22);
-      FMAA(c0, a5.w, b23);
+    shared_vector_store(&C_s[row_idx0][thd_x_vec_offset], c0);
 
-      FMAA(c0, a6.x, b24);
-      FMAA(c0, a6.y, b25);
-      FMAA(c0, a6.z, b26);
-      FMAA(c0, a6.w, b27);
-      FMAA(c0, a7.x, b28);
-      FMAA(c0, a7.y, b29);
-      FMAA(c0, a7.z, b30);
-      FMAA(c0, a7.w, b31);
-
-      shared_vector_store(&C_s[row_idx0][thd_x_vec_offset], c0);
-      //}
-
-      //if (row_idx < block->num_rows) {
-      FMAA(c1, a8.x, b0);
-      FMAA(c1, a8.y, b1);
-      FMAA(c1, a8.z, b2);
-      FMAA(c1, a8.w, b3);
-      FMAA(c1, a9.x, b4);
-      FMAA(c1, a9.y, b5);
-      FMAA(c1, a9.z, b6);
-      FMAA(c1, a9.w, b7);
-
-//      __syncthreads();
-
-//      for (int row_idx = 0; row_idx < 4; row_idx++) {
-//        float value = C_s[row_idx][thd_idx_linear];
-//        float* C_add_addr = coeff_ptr(C, A_rows[row_idx], k + thd_idx_linear);
-//        if (value) atomicAdd(C_add_addr, value);
-//      }
-
-      FMAA(c1, a10.x, b8);
-      FMAA(c1, a10.y, b9);
-      FMAA(c1, a10.z, b10);
-      FMAA(c1, a10.w, b11);
-      FMAA(c1, a11.x, b12);
-      FMAA(c1, a11.y, b13);
-      FMAA(c1, a11.z, b14);
-      FMAA(c1, a11.w, b15);
-
-      FMAA(c1, a12.x, b16);
-      FMAA(c1, a12.y, b17);
-      FMAA(c1, a12.z, b18);
-      FMAA(c1, a12.w, b19);
-      FMAA(c1, a13.x, b20);
-      FMAA(c1, a13.y, b21);
-      FMAA(c1, a13.z, b22);
-      FMAA(c1, a13.w, b23);
-
-      FMAA(c1, a14.x, b24);
-      FMAA(c1, a14.y, b25);
-      FMAA(c1, a14.z, b26);
-      FMAA(c1, a14.w, b27);
-      FMAA(c1, a15.x, b28);
-      FMAA(c1, a15.y, b29);
-      FMAA(c1, a15.z, b30);
-      FMAA(c1, a15.w, b31);
-      //}
-      shared_vector_store(&C_s[row_idx1][thd_x_vec_offset], c1);
-
-      __syncthreads();
-
-//      for (int row_idx = 4; row_idx < BLOCK_COLS; row_idx++) {
-//        float value = C_s[row_idx][thd_idx_linear];
-//        float* C_add_addr = coeff_ptr(C, A_rows[row_idx], k + thd_idx_linear);
-//        if (value) atomicAdd(C_add_addr, value);
-//      }
+    __syncthreads();
 
     for (int row_idx = 0; row_idx < MAX_ROWS_PER_BLOCK; row_idx++) {
       float value = C_s[row_idx][thd_idx_linear];
       float* C_add_addr = coeff_ptr(C, A_rows[row_idx], k + thd_idx_linear);
-      if (value) atomicAdd(C_add_addr, value);
+      atomicAdd(C_add_addr, value);
     }
   }
 }
 
 int
-codelet_8x32x1::codelet_multiply(cudaStream_t &stream, cudaEvent_t &start, cudaEvent_t &stop, const Block *blocks,
+codelet_4x32x1::codelet_multiply(cudaStream_t &stream, cudaEvent_t &start, cudaEvent_t &stop, const Block *blocks,
                                 size_t num_blocks,
                                 const CSR<float> &A_h, const CSR<float> &A, const Dense &B, Dense &C) {
   dim3 grid_dim(num_blocks, 1);
 
-//  /cudaFuncSetCacheConfig(_block_multiply_reg_storage_orig_8x32x1, cudaFuncCachePreferShared);
+  cudaFuncSetCacheConfig(_block_multiply_reg_storage_orig_4x32x1, cudaFuncCachePreferShared);
   cudaEventRecord(start, stream);
-  _block_multiply_reg_storage_orig_8x32x1<<<grid_dim, codelet_block_dim, 0, stream>>>(blocks, num_blocks, A, B, C);
+  _block_multiply_reg_storage_orig_4x32x1<<<grid_dim, codelet_block_dim, 0, stream>>>(blocks, num_blocks, A, B, C);
   CHECK_CUDA(cudaGetLastError());
   cudaEventRecord(stop, stream);
 

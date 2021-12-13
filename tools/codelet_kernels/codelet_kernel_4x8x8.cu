@@ -29,7 +29,7 @@ _block_multiply_reg_storage_4x8x8(const Block *blocks, int num_blocks, const CSR
   __shared__ __align__(32) float A_s[BATCH_VALUE_TOTAL];
   __shared__ __align__(32) int block_rows[BATCH_ROW_TOTAL];
   __shared__ __align__(32) int block_col_pattern[BATCH_COL_TOTAL];
-  //__shared__ __align__(32) float B_s[MAX_COLS_PER_BLOCK][TILE_K];
+  //__shared__ __align__(32) float B_s[BLOCK_COLS][TILE_K];
   __shared__ __align__(32) float C_s[MAX_ROWS_PER_BLOCK * 4][32];
 
   int *batch_col_pattern_ptr = block->col_pattern;

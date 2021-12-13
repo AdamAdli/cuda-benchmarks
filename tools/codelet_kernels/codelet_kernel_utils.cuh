@@ -24,6 +24,11 @@ float4 shared_const_vector_load(const float *__restrict__ src) {
 }
 
 __device__ __forceinline__
+int4 shared_const_vector_load(const int *__restrict__ src) {
+  return *reinterpret_cast<const int4 *>(src);
+}
+
+__device__ __forceinline__
 void shared_vector_store(float *__restrict__ dst, float4 src) {
   *reinterpret_cast<float4 *>(dst) = src;
 }

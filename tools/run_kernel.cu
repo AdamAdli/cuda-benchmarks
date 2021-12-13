@@ -51,11 +51,21 @@ int run_kernel(const Dense& A, const Dense& B, const Dense& C, const std::string
   std::cout << name << " took " << total_time / ITERATIONS << "ms (avg)" << std::endl;
   test_harness::csv_row_insert(csv_row, name, total_time / ITERATIONS);
 
+  cudaDeviceSynchronize();
+
   CHECK_CUDA(cudaMemcpy(C.values, C_values_d, C.rows * C.cols * sizeof(float), cudaMemcpyDeviceToHost));
 
   CHECK_CUDA(cudaFree(A_values_d))
   CHECK_CUDA(cudaFree(B_values_d))
   CHECK_CUDA(cudaFree(C_values_d))
+
+  cudaDeviceSynchronize();
+
+  cudaEventDestroy(start);
+  cudaEventDestroy(stop);
+  cudaStreamDestroy(stream);
+
+  cudaDeviceSynchronize();
 
   return 0;
 }
@@ -119,12 +129,22 @@ int run_kernel(const CSR<float>& A, const Dense& B, Dense& C, const std::string&
 
   CHECK_CUDA(cudaMemcpy(C.values, C_values_d, C.rows * C.cols * sizeof(float), cudaMemcpyDeviceToHost));
 
+  cudaDeviceSynchronize();
+
   CHECK_CUDA(cudaFree(A_values_d));
   CHECK_CUDA(cudaFree(A_row_offsets_d));
   CHECK_CUDA(cudaFree(A_col_indices_d));
 
   CHECK_CUDA(cudaFree(B_values_d))
   CHECK_CUDA(cudaFree(C_values_d))
+
+  cudaDeviceSynchronize();
+
+  cudaEventDestroy(start);
+  cudaEventDestroy(stop);
+  cudaStreamDestroy(stream);
+
+  cudaDeviceSynchronize();
 
   return 0;
 }
@@ -194,6 +214,9 @@ int run_kernel(const std::vector<CodeletMultiply::Block> &blocks, const CSR<floa
     cudaDeviceSynchronize();
 
     kernel(stream, start, stop, blocks_d, blocks.size(), A, A_d, B_d, C_d);
+    CHECK_CUDA(cudaGetLastError());
+    cudaDeviceSynchronize();
+    CHECK_CUDA(cudaGetLastError());
     cudaEventSynchronize(stop);
     CHECK_CUDA(cudaGetLastError());
 
@@ -208,6 +231,8 @@ int run_kernel(const std::vector<CodeletMultiply::Block> &blocks, const CSR<floa
 
   CHECK_CUDA(cudaMemcpy(C.values, C_values_d, C.rows * C.cols * sizeof(float), cudaMemcpyDeviceToHost));
 
+  cudaDeviceSynchronize();
+
   CHECK_CUDA(cudaFree(A_values_d));
   CHECK_CUDA(cudaFree(A_row_offsets_d));
   CHECK_CUDA(cudaFree(A_col_indices_d));
@@ -220,6 +245,14 @@ int run_kernel(const std::vector<CodeletMultiply::Block> &blocks, const CSR<floa
 
   CHECK_CUDA(cudaFree(B_values_d));
   CHECK_CUDA(cudaFree(C_values_d));
+
+  cudaDeviceSynchronize();
+
+  cudaEventDestroy(start);
+  cudaEventDestroy(stop);
+  cudaStreamDestroy(stream);
+
+  cudaDeviceSynchronize();
 
   return 0;
 }

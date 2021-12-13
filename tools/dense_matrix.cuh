@@ -2,8 +2,8 @@
 // Created by lwilkinson on 11/4/21.
 //
 
-#ifndef BENCHMARK_SYNTHETIC_CODLETS_CUH
-#define BENCHMARK_SYNTHETIC_CODLETS_CUH
+#ifndef BENCHMARK_DENSE_MATRIX_CUH
+#define BENCHMARK_DENSE_MATRIX_CUH
 
 typedef struct Dense {
     int rows;
@@ -31,4 +31,4 @@ typedef struct Dense {
 
 } Dense;
 
-#endif //BENCHMARK_SYNTHETIC_CODLETS_CUH
+#endif //BENCHMARK_DENSE_MATRIX_CUH

@@ -11,10 +11,10 @@
 #include "common/utils/csv_log_io.h"
 #include "common/utils/matrix_utils.h"
 
-#include "synthetic_codlets.cuh"
+#include "dense_matrix.cuh"
 #include "codlet_multiply.cuh"
 
-constexpr int ITERATIONS = 1;
+constexpr int ITERATIONS = 20;
 
 int run_kernel(const Dense& A, const Dense& B, const Dense& C, const std::string& name, test_harness::csv_row_t &csv_row,
                int(*kernel)(cudaStream_t& stream, cudaEvent_t& start, cudaEvent_t& stop,

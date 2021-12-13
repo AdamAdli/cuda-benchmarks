@@ -2,6 +2,21 @@ cmake_minimum_required(VERSION 3.16)
 project(benchmark LANGUAGES CUDA CXX C)
 
 cmake_policy(SET CMP0104 OLD)
+set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
+
+include(Dependency)
+
+#
+#   Collect Dependencies
+#
+
+# For csv rows
+download_dependency(
+        NAME            ranges
+        GIT_REPOSITORY  https://github.com/ericniebler/range-v3.git
+        GIT_TAG         0.11.0
+        HEADER_ONLY
+)
 
 #
 #   Use -DCUDA_ARCHS to specify which GPUs to compile for
@@ -29,6 +44,9 @@ else ()
     message(FATAL_ERROR "CUDA required, failed to CUDA, try setting CUDACXX and resetting the CMakeCache")
 endif ()
 
+#set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -lineinfo -g -G")
+set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -O3 --keep")
+
 create_cuda_gencode_flags(CUDA_GENCODE_FLAGS ${CUDA_ARCHS})
 set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} ${CUDA_GENCODE_FLAGS}")
 set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS}" CACHE STRING "" FORCE)
@@ -47,6 +65,7 @@ message(STATUS ${COMMON_CUDA_SRCS})
 
 macro(add_common)
     message(STATUS "[${ARGV0}] Adding common")
+    add_dependency_ranges(${ARGV0})
     target_sources(${ARGV0} PUBLIC ${COMMON_CUDA_SRCS})
     target_sources(${ARGV0} PUBLIC ${COMMON_CPP_SRCS})
     target_include_directories(${ARGV0} PUBLIC ${PROJECT_SOURCE_DIR})
@@ -54,6 +73,7 @@ endmacro()
 
 macro(add_common_utils)
     message(STATUS "[${ARGV0}] Adding common utils")
+    add_dependency_ranges(${ARGV0})
     target_sources(${ARGV0} PUBLIC ${COMMON_UTILS_CPP_SRCS})
     target_include_directories(${ARGV0} PUBLIC ${PROJECT_SOURCE_DIR})
 endmacro()
@@ -103,9 +123,30 @@ target_link_libraries(stride_check PUBLIC Boost::boost)
 
 ## Synthetic codelets
 
-set(CUDA_SRCS tools/synthetic_codlets.cu)
+set(CUDA_SRCS tools/synthetic_codlets.cu tools/run_kernel.cu
+        tools/codelet_kernels/codelet_kernel_4x8x8.cu
+        tools/codelet_kernels/codelet_kernel_8x32x1.cu
+        tools/codelet_kernels/codelet_kernel_8x8x4.cu
+        tools/codelet_kernels/codelet_kernel_4x16x4.cu
+        tools/codelet_kernels/codelet_kernel_4x32x1.cu)
+
 add_executable(synthetic_codelets ${CUDA_SRCS})
 target_compile_options(synthetic_codelets INTERFACE $<$<COMPILE_LANGUAGE:CUDA>:${CMAKE_CUDA_FLAGS}>)
 add_cupti_profiler(synthetic_codelets)
 add_common_utils(synthetic_codelets)
 add_kernel_sputnik(synthetic_codelets)
+
+## Sparse matrix benchmark
+
+set(CUDA_SRCS tools/sparse_resnet_benchmark.cu tools/run_kernel.cu
+        tools/codelet_kernels/codelet_kernel_4x8x8.cu
+        tools/codelet_kernels/codelet_kernel_8x32x1.cu
+        tools/codelet_kernels/codelet_kernel_8x8x4.cu
+        tools/codelet_kernels/codelet_kernel_4x16x4.cu
+        tools/codelet_kernels/codelet_kernel_4x32x1.cu)
+
+add_executable(sparse_resnet_benchmark ${CUDA_SRCS})
+target_compile_options(sparse_resnet_benchmark INTERFACE $<$<COMPILE_LANGUAGE:CUDA>:${CMAKE_CUDA_FLAGS}>)
+add_cupti_profiler(sparse_resnet_benchmark)
+add_common_utils(sparse_resnet_benchmark)
+add_kernel_sputnik(sparse_resnet_benchmark)

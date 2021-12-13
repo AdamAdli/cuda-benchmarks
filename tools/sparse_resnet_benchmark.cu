@@ -1,4 +1,8 @@
 //
+// Created by lwilkinson on 12/13/21.
+//
+
+//
 // Created by lwilkinson on 11/4/21.
 //
 
@@ -36,9 +40,9 @@ using namespace std;
     }
 
 struct Chunks {
-  int * col_pattern;
-  int * row_pattern;
-  int * row_offsets;
+    int * col_pattern;
+    int * row_pattern;
+    int * row_offsets;
 };
 
 
@@ -52,24 +56,24 @@ static const int TILE_DIM = 32;
 
 int cublas_multiply(cudaStream_t& stream, cudaEvent_t& start, cudaEvent_t& stop, const Dense& A, const Dense& B, Dense& C)
 {
-    float alpha = 1.0, beta = 1.0;
-    cublasHandle_t handle;
-    CHECK_CUBLAS(cublasCreate_v2(&handle));
-    cudaEventRecord(start, stream);
+  float alpha = 1.0, beta = 1.0;
+  cublasHandle_t handle;
+  CHECK_CUBLAS(cublasCreate_v2(&handle));
+  cudaEventRecord(start, stream);
 
-    // https://stackoverflow.com/a/56064726
-    CHECK_CUBLAS(cublasSgemm(handle,
-      CUBLAS_OP_N, CUBLAS_OP_N,
-      C.cols, C.rows, A.cols, /* m, n, k */
-      &alpha,
-      B.values, B.cols, /* *A, lda */
-      A.values, A.cols, /* *B, lda */
-      &beta,
-      C.values, C.cols))
-    cudaEventRecord(stop, stream);
+  // https://stackoverflow.com/a/56064726
+  CHECK_CUBLAS(cublasSgemm(handle,
+                           CUBLAS_OP_N, CUBLAS_OP_N,
+                           C.cols, C.rows, A.cols, /* m, n, k */
+                           &alpha,
+                           B.values, B.cols, /* *A, lda */
+                           A.values, A.cols, /* *B, lda */
+                           &beta,
+                           C.values, C.cols))
+  cudaEventRecord(stop, stream);
 
-    CHECK_CUBLAS(cublasDestroy_v2(handle));
-    return 0;
+  CHECK_CUBLAS(cublasDestroy_v2(handle));
+  return 0;
 }
 
 // Taken from: https://stackoverflow.com/a/18856054
@@ -132,9 +136,9 @@ int sgk_multiply(cudaStream_t& stream, cudaEvent_t& start, cudaEvent_t& stop, co
   // Argsort the row indices based on their length.
   std::sort(swizzle_staging.begin(), swizzle_staging.end(),
             [&A_h](int idx_a, int idx_b) {
-              int length_a = A_h.row_offsets[idx_a + 1] - A_h.row_offsets[idx_a];
-              int length_b = A_h.row_offsets[idx_b + 1] - A_h.row_offsets[idx_b];
-              return length_a > length_b;
+                int length_a = A_h.row_offsets[idx_a + 1] - A_h.row_offsets[idx_a];
+                int length_b = A_h.row_offsets[idx_b + 1] - A_h.row_offsets[idx_b];
+                return length_a > length_b;
             });
 
   int *swizzle_d;
@@ -156,8 +160,8 @@ int sgk_multiply(cudaStream_t& stream, cudaEvent_t& start, cudaEvent_t& stop, co
 }
 
 typedef struct codelet {
-  std::vector<int> row_offsets;
-  std::vector<int> col_offsets;
+    std::vector<int> row_offsets;
+    std::vector<int> col_offsets;
 } codelet_t;
 
 static inline int partition_evenly(int size, int target) {
@@ -441,89 +445,66 @@ CSR<float> read_coo_blocked(const std::string &path, std::vector<CodeletMultiply
 }
 
 int main() {
-  const int A_rows = 1920;
-  const int A_cols = 1920;
+  const std::vector<int> batch_sizes = { 64, 128, 256, 512, 768, 1024 };
+  const int A_rows = 512;
+  const int A_cols = 512;
+  const int B_cols = 128;
 
-  std::cout << "Generating pattern ..." << std::endl;
-  auto codelets = gen_checkerboard(A_rows, A_cols, 3);
-  std::cout << "Constructing CSR matrix ..." << std::endl;
-  CSR<float> csr = gen_csr(A_rows, A_cols, codelets);
-  std::cout << "Sparsity " << (1.f - csr.nnz / float(csr.rows * csr.cols)) * 100 << "%" << std::endl;
-  std::cout << "Generating dense version ..." << std::endl;
-  auto A = csr_to_dense(csr);
-  auto blocks_4x8x8 = gen_blocks(codelets, 4, 8, 8);
-  auto blocks_8x32x1 = gen_blocks(codelets, 8, 32, 1);
-  auto blocks_8x8x4 = gen_blocks(codelets, 8, 8, 4);
-  auto blocks_4x16x4 = gen_blocks(codelets, 4, 16, 4);
-  auto blocks_4x32x1 = gen_blocks(codelets, 4, 32, 1);
+  struct file_to_test {
+      string file;
+      string name;
+      string sparsity;
+  };
 
-  for (int batch_size = 32; batch_size <= 4096; batch_size += 64) {
-    Dense B(csr.cols, batch_size, 1.f);
-    Dense C(csr.rows, batch_size, 0.f);
-    Dense C_golden(csr.rows, batch_size, 0.f);
+  int nnz_in_blocks, total_nnz;
 
-    std::cout << "Running kernels " << batch_size << "..." << std::endl;
+  std::vector<struct file_to_test> files_to_test = {
+    {"../matrices/rn50/magnitude_pruning/0.7/bottleneck_1_block_group3_2_1", "bn_1_blk_3_2_1", "0.7"},
+    {"../matrices/rn50/magnitude_pruning/0.8/bottleneck_1_block_group3_2_1", "bn_1_blk_3_2_1", "0.8"},
+    {"../matrices/rn50/magnitude_pruning/0.7/bottleneck_1_block_group_projection_block_group4", "bn_1_blk_proj_4", "0.7"},
+    {"../matrices/rn50/magnitude_pruning/0.8/bottleneck_1_block_group_projection_block_group4", "bn_1_blk_proj_4", "0.8"},
+    {"../matrices/rn50/magnitude_pruning/0.7/final_dense", "final_dense", "0.7" },
+    {"../matrices/rn50/magnitude_pruning/0.8/final_dense", "final_dense", "0.8" },
+    {"../matrices/rn50/magnitude_pruning/0.7/initial_conv", "initial_conv", "0.7" },
+    {"../matrices/rn50/magnitude_pruning/0.8/initial_conv", "initial_conv", "0.8" },
+    {"../matrices/rn50/magnitude_pruning/0.7/bottleneck_3_block_group2_1_1", "bottleneck_3_block_group2_1_1", "0.7" },
+    {"../matrices/rn50/magnitude_pruning/0.8/bottleneck_3_block_group2_1_1", "bottleneck_3_block_group2_1_1", "0.8" }
+  };
 
+  for (auto& file : files_to_test) {
+    std::cout << file.name << " " << file.sparsity << std::endl;
 
-    //
-    //  Run Kernels
-    //
+    std::vector<CodeletMultiply::Block> blocks;
+    auto csr = read_coo_blocked(file.file + ".coo_blocked.txt", blocks, nnz_in_blocks, total_nnz);
+    auto csr_full = read_smtx(file.file + ".smtx");
 
     test_harness::csv_row_t csv_row;
-    test_harness::csv_row_insert(csv_row, "batch_size", batch_size);
-    test_harness::csv_row_insert(csv_row, "A rows", A_rows);
-    test_harness::csv_row_insert(csv_row, "A cols", A_cols);
+    test_harness::csv_row_insert(csv_row, "file", file.file);
+    test_harness::csv_row_insert(csv_row, "name", file.name);
+    test_harness::csv_row_insert(csv_row, "sparsity", file.sparsity);
+    test_harness::csv_row_insert(csv_row, "nnz_in_blocks", nnz_in_blocks);
+    test_harness::csv_row_insert(csv_row, "total_nnz", total_nnz);
+    test_harness::csv_row_insert(csv_row, "num_blocks", blocks.size());
 
-    run_kernel(A, B, C_golden, "cublas", csv_row,
-               cublas_multiply);
-
-    run_kernel(csr, B, C, "sgk", csv_row,
-               sgk_multiply);
-    compare_dense(C_golden, C);
-
-    C.fill(0);
-    run_kernel(blocks_4x8x8, csr, B, C, "codelets_4x8x8", csv_row,
-               CodeletMultiply::codelet_4x8x8::codelet_multiply);
-    compare_dense(C_golden, C);
-
-//    std::cout << blocks_8x8x4.size() << std::endl;
-//    C.fill(0);
-//    run_kernel(blocks_8x8x4, csr, B, C, "codelets_8x8x4", csv_row,
-//               CodeletMultiply::codelet_8x8x1::codelet_multiply);
-//    compare_dense(C_golden, C);
+    Dense B(csr.cols, B_cols, 1.f);
+    Dense C(csr.rows, B_cols, 0.f);
 
     C.fill(0);
-    std::cout << blocks_8x32x1.size() << std::endl;
-    run_kernel(blocks_8x32x1, csr, B, C, "codelets_8x32x1", csv_row,
+    run_kernel(blocks, csr, B, C, "codelets_8x32x1", csv_row,
                CodeletMultiply::codelet_8x32x1::codelet_multiply);
-    compare_dense(C_golden, C);
-//
-//    C.fill(0);
-//    std::cout << blocks_4x16x4.size() << std::endl;
-//    run_kernel(blocks_4x16x4, csr, B, C, "codelets_4x16x4", csv_row,
-//               CodeletMultiply::codelet_4x16x4::codelet_multiply);
-//    compare_dense(C_golden, C);
 
-//    C.fill(0);
-//    std::cout << blocks_4x32x1.size() << std::endl;
-//    run_kernel(blocks_4x32x1, csr, B, C, "codelets_4x32x1", csv_row,
-//               CodeletMultiply::codelet_4x32x1::codelet_multiply);
-//    compare_dense(C_golden, C);
+    C.fill(0);
+    run_kernel(csr, B, C, "sgk_part", csv_row, sgk_multiply);
+
+
+    C.fill(0);
+    run_kernel(csr_full, B, C, "sgk_full", csv_row, sgk_multiply);
 
     cudaDeviceReset();
     cudaDeviceSynchronize();
 
-    test_harness::write_csv_row("../output/synthetic_matrix.csv", csv_row);
+    test_harness::write_csv_row("../output/benchmark_codelets.csv", csv_row);
   }
 
-  delete A.values;
+  return 0;
 }
-
-
-//  for (int i = 0; i < csr.rows; i++) {
-//    for (int p = csr.row_offsets[i]; p < csr.row_offsets[i+1]; p++) {
-//      for (int j = 0; j < B.cols; j++) {
-//        C_golden.values[i * C_golden.cols + j] += csr.values[p] * B.coeff(csr.col_indices[p], j);
-//      }
-//    }
-//  }
