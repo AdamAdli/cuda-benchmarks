@@ -367,7 +367,8 @@ CSR<float> read_smtx(const std::string &path) {
   return std::move(csr);
 }
 
-CSR<float> read_coo_blocked(const std::string &path, std::vector<CodeletMultiply::Block> &blocks, int& nnz_in_blocks, int& total_nnz) {
+CSR<float> read_coo_blocked(const std::string &path, std::vector<CodeletMultiply::Block> &blocks,
+                            int& nnz_not_in_blocks, int& total_nnz) {
   std::ifstream file;
   file.open(path, std::ios_base::in);
   if (!file.is_open()) { std::cout << "File could not be found..." << std::endl; exit(1); }
@@ -383,12 +384,12 @@ CSR<float> read_coo_blocked(const std::string &path, std::vector<CodeletMultiply
   first_line >> token;
   first_line >> rows;
   first_line >> cols;
-  first_line >> nnz_in_blocks;
+  first_line >> nnz_not_in_blocks;
   first_line >> total_nnz;
 
   std::cout << token << std::endl;
   if (token != "%csr") { std::cout << "csr token mismatch" << std::endl; exit(1); }
-  CSR<float> csr(rows, cols, nnz_in_blocks);
+  CSR<float> csr(rows, cols, nnz_not_in_blocks);
   for (int i = 0; i < csr.rows + 1; i++) { file >> csr.row_offsets[i]; }
 
   // Go to next line
@@ -456,7 +457,7 @@ int main() {
       string sparsity;
   };
 
-  int nnz_in_blocks, total_nnz;
+  int nnz_not_in_blocks, total_nnz;
 
   std::vector<struct file_to_test> files_to_test = {
     {"../matrices/rn50/magnitude_pruning/0.7/bottleneck_1_block_group3_2_1", "bn_1_blk_3_2_1", "0.7"},
@@ -475,14 +476,15 @@ int main() {
     std::cout << file.name << " " << file.sparsity << std::endl;
 
     std::vector<CodeletMultiply::Block> blocks;
-    auto csr = read_coo_blocked(file.file + ".coo_blocked.txt", blocks, nnz_in_blocks, total_nnz);
+    auto csr = read_coo_blocked(file.file + ".coo_blocked.txt", blocks, nnz_not_in_blocks, total_nnz);
     auto csr_full = read_smtx(file.file + ".smtx");
 
     test_harness::csv_row_t csv_row;
     test_harness::csv_row_insert(csv_row, "file", file.file);
     test_harness::csv_row_insert(csv_row, "name", file.name);
     test_harness::csv_row_insert(csv_row, "sparsity", file.sparsity);
-    test_harness::csv_row_insert(csv_row, "nnz_in_blocks", nnz_in_blocks);
+    test_harness::csv_row_insert(csv_row, "nnz_not_in_blocks", nnz_not_in_blocks);
+    test_harness::csv_row_insert(csv_row, "nnz_in_blocks", total_nnz - nnz_not_in_blocks);
     test_harness::csv_row_insert(csv_row, "total_nnz", total_nnz);
     test_harness::csv_row_insert(csv_row, "num_blocks", blocks.size());
 
@@ -490,11 +492,11 @@ int main() {
     Dense C(csr.rows, B_cols, 0.f);
 
     C.fill(0);
-    run_kernel(blocks, csr, B, C, "codelets_8x32x1", csv_row,
+    run_kernel(blocks, csr, B, C, "coo_blocks_8x32x1", csv_row,
                CodeletMultiply::codelet_8x32x1::codelet_multiply);
 
     C.fill(0);
-    run_kernel(csr, B, C, "sgk_part", csv_row, sgk_multiply);
+    run_kernel(csr, B, C, "sputnik_csr_part", csv_row, sgk_multiply);
 
 
     C.fill(0);
