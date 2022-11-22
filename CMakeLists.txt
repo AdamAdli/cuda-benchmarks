@@ -4,6 +4,12 @@ project(benchmark LANGUAGES CUDA CXX C)
 cmake_policy(SET CMP0104 OLD)
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
 
+# Environment variables & paths.
+# TODO: clean this up - I had to do this to get cupti to work on ArchLinux
+list(APPEND CMAKE_CUDA_IMPLICIT_LINK_DIRECTORIES /opt/cuda/extras/CUPTI/lib64)
+include_directories(/opt/cuda/extras/CUPTI/include)
+
+
 include(Dependency)
 
 #
@@ -150,3 +156,18 @@ target_compile_options(sparse_resnet_benchmark INTERFACE $<$<COMPILE_LANGUAGE:CU
 add_cupti_profiler(sparse_resnet_benchmark)
 add_common_utils(sparse_resnet_benchmark)
 add_kernel_sputnik(sparse_resnet_benchmark)
+
+
+## Dense MatMul benchmark
+set(CUDA_SRCS tools/dense_matmul_benchmark.cu tools/run_kernel.cu
+        tools/codelet_kernels/codelet_kernel_4x8x8.cu
+        tools/codelet_kernels/codelet_kernel_8x32x1.cu
+        tools/codelet_kernels/codelet_kernel_8x8x4.cu
+        tools/codelet_kernels/codelet_kernel_4x16x4.cu
+        tools/codelet_kernels/codelet_kernel_4x32x1.cu)
+
+add_executable(dense_matmul_benchmark ${CUDA_SRCS})
+target_compile_options(dense_matmul_benchmark INTERFACE $<$<COMPILE_LANGUAGE:CUDA>:${CMAKE_CUDA_FLAGS}>)
+add_cupti_profiler(dense_matmul_benchmark)
+add_common_utils(dense_matmul_benchmark)
+add_kernel_sputnik(dense_matmul_benchmark)
